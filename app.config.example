@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <connectionStrings>
+    <add name="MES-H5-DB" providerName="Microsoft.Data.SqlClient"
+         connectionString="Server=STANDARD_SERVER;Database=STANDARD_DATABASE;Integrated Security=True;Encrypt=True;TrustServerCertificate=False" />
+    <add name="Project-DB" providerName="Microsoft.Data.SqlClient"
+         connectionString="Server=CHECK_SERVER;Database=CHECK_DATABASE;Integrated Security=True;Encrypt=True;TrustServerCertificate=False" />
+  </connectionStrings>
+</configuration>
