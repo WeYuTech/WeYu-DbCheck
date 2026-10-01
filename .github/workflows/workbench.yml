@@ -1,0 +1,44 @@
+name: Workbench validation
+on:
+  push:
+    branches: [feature/dbcheck-workbench-20261001]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: workbench-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore existing dependencies
+        run: dotnet restore WEYU-DBCheck.csproj
+      - name: Build
+        run: dotnet build WEYU-DBCheck.csproj --no-restore -c Release
+      - name: Offline regression tests
+        shell: pwsh
+        run: |
+          if (Test-Path Workbench/SelfTests.cs) {
+            dotnet run --project WEYU-DBCheck.csproj --no-build -c Release -- --self-test
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - name: Render demo UI without a database
+        shell: pwsh
+        run: |
+          if (Test-Path Workbench/UiSmokeTests.cs) {
+            dotnet run --project WEYU-DBCheck.csproj --no-build -c Release -- --ui-smoke-test output/ui
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: workbench-ui-preview
+          path: output/ui/
+          if-no-files-found: ignore
