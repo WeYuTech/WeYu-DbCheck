@@ -1,5 +1,3 @@
-using System.Xml.Linq;
-
 namespace DbCheck.Workbench;
 
 internal sealed partial class WorkbenchForm : Form
@@ -10,7 +8,7 @@ internal sealed partial class WorkbenchForm : Form
     private readonly CancellationTokenSource lifetime = new();
     private CancellationTokenSource? operation;
     private bool busy, binding, applyingOptions;
-    private readonly EndpointEditor source = new("標準 DB", "只讀取標準，不會寫入來源資料庫。"), target = new("檢查 DB", "所有 SQL 草稿都必須人工檢閱後另行執行。");
+    private readonly EndpointEditor source = new("標準 DB", "只讀取標準，不會寫入來源資料庫。"), target = new("檢查 DB", "SQL 草稿須人工檢閱後另行執行。");
     private readonly Panel pagesHost = new() { Dock = DockStyle.Fill, Padding = new Padding(20), BackColor = Ui.Background };
     private readonly FlowLayoutPanel navigation = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(12, 20, 12, 12), BackColor = Ui.Sidebar };
     private readonly Dictionary<string, Control> pages = new();
@@ -46,11 +44,10 @@ internal sealed partial class WorkbenchForm : Form
         root.ColumnStyles.Add(new(SizeType.Absolute, 190)); root.ColumnStyles.Add(new(SizeType.Percent, 100));
         root.RowStyles.Add(new(SizeType.Absolute, 84)); root.RowStyles.Add(new(SizeType.Percent, 100)); root.RowStyles.Add(new(SizeType.Absolute, 48));
         var brand = new Panel { Dock = DockStyle.Fill, BackColor = Ui.Sidebar, Padding = new Padding(22, 18, 18, 8) };
-        var logo = new Label { Text = "WEYU\nDBCheck", ForeColor = Color.White, Font = new Font(Font.FontFamily, 15, FontStyle.Bold), Dock = DockStyle.Fill };
-        brand.Controls.Add(logo); root.Controls.Add(brand, 0, 0);
+        brand.Controls.Add(new Label { Text = "WEYU\nDBCheck", ForeColor = Color.White, Font = new Font(Font.FontFamily, 15, FontStyle.Bold), Dock = DockStyle.Fill }); root.Controls.Add(brand, 0, 0);
         var heading = Ui.Rows(new(SizeType.Percent, 58), new(SizeType.Percent, 42)); heading.Padding = new Padding(20, 10, 12, 5); heading.BackColor = Color.White;
         var title = Ui.Label("資料庫差異，一眼看懂"); title.Font = new Font(Font.FontFamily, 19, FontStyle.Bold);
-        heading.Controls.Add(title, 0, 0); heading.Controls.Add(Ui.Label("READ ONLY   ／   比對 → 檢閱 → 匯出草稿   ·   不執行資料库修改" + (demo ? "   ·   SYNTHETIC DEMO" : ""), true), 0, 1);
+        heading.Controls.Add(title, 0, 0); heading.Controls.Add(Ui.Label("READ ONLY   ／   比對 → 檢閱 → 匯出草稿   ·   不執行資料庫修改" + (demo ? "   ·   DEMO" : ""), true), 0, 1);
         root.Controls.Add(heading, 1, 0); root.Controls.Add(navigation, 0, 1); root.Controls.Add(pagesHost, 1, 1);
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Padding = new Padding(16, 4, 8, 4), BackColor = Color.White };
         footer.ColumnStyles.Add(new(SizeType.Percent, 100)); footer.ColumnStyles.Add(new(SizeType.Absolute, 160)); footer.ColumnStyles.Add(new(SizeType.Absolute, 116));
@@ -92,18 +89,16 @@ internal sealed partial class WorkbenchForm : Form
         var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         var layout = Ui.Rows(new(SizeType.Absolute, 70), new(SizeType.Absolute, 424), new(SizeType.Absolute, 58), new(SizeType.Absolute, 130), new(SizeType.Absolute, 48));
         layout.Dock = DockStyle.Top; layout.Height = 730;
-        layout.Controls.Add(PageHeading("環境與基準", "先確認標準來源與檢查目標；可用一份標準依序檢查多個環境。"), 0, 0);
+        layout.Controls.Add(PageHeading("環境與基準", "先確認標準来源與檢查目標；可用一份標準依序檢查多個環境。"), 0, 0);
         var cards = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0) };
         cards.ColumnStyles.Add(new(SizeType.Percent, 50)); cards.ColumnStyles.Add(new(SizeType.Percent, 50)); cards.Controls.Add(source, 0, 0); cards.Controls.Add(target, 1, 0); layout.Controls.Add(cards, 0, 1);
-        var loadSnapshot = Ui.Button("載入標準快照");
-        loadSnapshot.Click += async (_, _) => await LoadBaselineAsync();
+        var loadSnapshot = Ui.Button("載入標準快照"); loadSnapshot.Click += async (_, _) => await LoadBaselineAsync();
         useSnapshot.CheckedChanged += (_, _) => { if (busy || applyingOptions) return; source.Enabled = !useSnapshot.Checked; ClearComparison(); };
-        snapshotLabel.MaximumSize = new Size(500, 0);
-        layout.Controls.Add(Ui.Actions(useSnapshot, loadSnapshot, snapshotLabel), 0, 2);
+        snapshotLabel.MaximumSize = new Size(500, 0); layout.Controls.Add(Ui.Actions(useSnapshot, loadSnapshot, snapshotLabel), 0, 2);
         var queuePanel = Ui.Rows(new(SizeType.Absolute, 32), new(SizeType.Percent, 100));
         queuePanel.Controls.Add(Ui.Label("批次目標（空白時使用上方檢查 DB；連線只留在本次記憶體）", true), 0, 0);
         var queue = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 }; queue.ColumnStyles.Add(new(SizeType.Percent, 100)); queue.ColumnStyles.Add(new(SizeType.Absolute, 280)); queue.Controls.Add(targetQueue, 0, 0);
-        var add = Ui.Button("加入已驗證目標"), remove = Ui.Button("移除選取"), clear = Ui.Button("清空");
+        Button add = Ui.Button("加入已驗證目標"), remove = Ui.Button("移除選取"), clear = Ui.Button("清空");
         add.Click += (_, _) => { if (target.VerifiedConnection is null || target.VerifiedLabel is null) { Ui.Error(this, new InvalidOperationException("請先測試檢查 DB 連線。")); return; } if (!targetQueue.Items.Cast<TargetEndpoint>().Any(t => t.Label == target.VerifiedLabel)) targetQueue.Items.Add(new TargetEndpoint(target.VerifiedLabel, target.VerifiedConnection)); ClearComparison(); };
         remove.Click += (_, _) => { if (targetQueue.SelectedItem is not null) targetQueue.Items.Remove(targetQueue.SelectedItem); ClearComparison(); };
         clear.Click += (_, _) => { targetQueue.Items.Clear(); ClearComparison(); };
@@ -126,8 +121,8 @@ internal sealed partial class WorkbenchForm : Form
         var rules = Ui.Rows(new(SizeType.Absolute, 42), new(SizeType.Absolute, 42), new(SizeType.Absolute, 40)); rules.BackColor = Color.White; rules.Padding = new Padding(12, 0, 12, 0);
         rules.Controls.Add(Ui.Actions(ignoreCollation, ignoreOrdinal, ignoreNames, excludeZZ), 0, 0);
         var prefixRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 }; prefixRow.ColumnStyles.Add(new(SizeType.Absolute, 200)); prefixRow.ColumnStyles.Add(new(SizeType.Percent, 100));
-        prefixes.PlaceholderText = "例如 TEMP_,BACKUP_；以逗號分隔，不支援任意 SQL 或正規表示式"; prefixRow.Controls.Add(Ui.Label("額外排除物件名稱前綴"), 0, 0); prefixRow.Controls.Add(prefixes, 1, 0); rules.Controls.Add(prefixRow, 0, 1);
-        rules.Controls.Add(Ui.Label("目標獨有欄位／索引／約束／物件一律保留；沒有自動 DROP 或一鍵同步。", true), 0, 2); layout.Controls.Add(rules, 0, 2);
+        prefixes.PlaceholderText = "例如 TEMP_,BACKUP_；逗號分隔，不支援 SQL 或正規表示式"; prefixRow.Controls.Add(Ui.Label("額外排除物件名稱前綴"), 0, 0); prefixRow.Controls.Add(prefixes, 1, 0); rules.Controls.Add(prefixRow, 0, 1);
+        rules.Controls.Add(Ui.Label("目標獨有物件一律保留；沒有自動 DROP 或一鍵同步。", true), 0, 2); layout.Controls.Add(rules, 0, 2);
         foreach (var check in new[] { ignoreCollation, ignoreOrdinal, ignoreNames, excludeZZ }) check.CheckedChanged += (_, _) => { if (!applyingOptions) { ClearComparison(); UpdateScopeDescription(); } };
         prefixes.TextChanged += (_, _) => { if (!applyingOptions) { ClearComparison(); UpdateScopeDescription(); } };
         var explanation = Ui.CodeBox(); explanation.Font = Font; explanation.WordWrap = true;
@@ -139,10 +134,10 @@ internal sealed partial class WorkbenchForm : Form
     private Control BuildDifferences()
     {
         var layout = Ui.Rows(new(SizeType.Absolute, 62), new(SizeType.Absolute, 38), new(SizeType.Absolute, 32), new(SizeType.Percent, 100), new(SizeType.Absolute, 48));
-        layout.Controls.Add(PageHeading("差異檢視", "檢查 DB 的目前內容在左，標準基準在右；勾選物件後建立變更計畫。"), 0, 0);
+        layout.Controls.Add(PageHeading("差異檢視", "檢查 DB 目前內容在左，標準基準在右；勾選物件後建立變更計畫。"), 0, 0);
         var toolbar = new ToolStrip { Dock = DockStyle.Fill, GripStyle = ToolStripGripStyle.Hidden, BackColor = Color.White };
         targetResults.Width = 310; var resultHost = new ToolStripControlHost(targetResults) { AutoSize = false, Width = 315 };
-        var refresh = new ToolStripButton("重新比對 F5"), retry = new ToolStripButton("重試失敗");
+        ToolStripButton refresh = new("重新比對 F5"), retry = new("重試失敗");
         var export = new ToolStripDropDownButton("報告／快照");
         void ExportItem(string label, Func<Task> action) { var item = new ToolStripMenuItem(label); item.Click += async (_, _) => await action(); export.DropDownItems.Add(item); }
         ExportItem("匯出報告（JSON／HTML／CSV）", ExportReportAsync); ExportItem("保存標準結構快照", () => SaveSnapshotAsync(true)); ExportItem("保存檢查結構快照", () => SaveSnapshotAsync(false));
@@ -152,14 +147,14 @@ internal sealed partial class WorkbenchForm : Form
         summary.Dock = DockStyle.Fill; summary.AutoSize = false; summary.AutoEllipsis = true; layout.Controls.Add(summary, 0, 2);
         var split = new SplitContainer { Size = new Size(1100, 550), Dock = DockStyle.Fill, SplitterDistance = 285, SplitterWidth = 8, Panel1MinSize = 220, Panel2MinSize = 340, BackColor = Ui.Background };
         var list = Ui.Rows(new(SizeType.Absolute, 38), new(SizeType.Absolute, 38), new(SizeType.Percent, 100), new(SizeType.Absolute, 40));
-        search.PlaceholderText = "搜尋 schema／物件名稱（Ctrl+F）"; list.Controls.Add(search, 0, 0);
+        search.PlaceholderText = "搜尋 schema／物件（Ctrl+F）"; list.Controls.Add(search, 0, 0);
         typeFilter.Items.Add("全部類型"); foreach (var category in Enum.GetValues<ObjectCategory>()) typeFilter.Items.Add(Ui.Category(category)); typeFilter.SelectedIndex = 0;
         stateFilter.Items.AddRange(new object[] { "全部狀態", "待處理", "保留", "無法比對" }); stateFilter.SelectedIndex = 0;
         var filters = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 }; filters.ColumnStyles.Add(new(SizeType.Percent, 50)); filters.ColumnStyles.Add(new(SizeType.Percent, 50)); filters.Controls.Add(typeFilter, 0, 0); filters.Controls.Add(stateFilter, 1, 0); list.Controls.Add(filters, 0, 1);
         objects.ReadOnly = false;
         objects.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Selected", HeaderText = "選取", Width = 46, AutoSizeMode = DataGridViewAutoSizeColumnMode.None });
         objects.Columns.Add(new DataGridViewTextBoxColumn { Name = "Object", HeaderText = "物件", ReadOnly = true, FillWeight = 76 }); objects.Columns.Add(new DataGridViewTextBoxColumn { Name = "State", HeaderText = "狀態", ReadOnly = true, FillWeight = 24 });
-        list.Controls.Add(objects, 0, 2); var all = Ui.Button("選取可見差異"), none = Ui.Button("全部取消"); list.Controls.Add(Ui.Actions(all, none), 0, 3);
+        list.Controls.Add(objects, 0, 2); Button all = Ui.Button("選取可見差異"), none = Ui.Button("全部取消"); list.Controls.Add(Ui.Actions(all, none), 0, 3);
         all.Click += (_, _) => { foreach (DataGridViewRow row in objects.Rows) if (row.Tag is ObjectDifference item && item.CanSelect) selectedIds.Add(item.Id); RefreshObjects(); InvalidatePlan(); };
         none.Click += (_, _) => { selectedIds.Clear(); RefreshObjects(); InvalidatePlan(); };
         objects.CurrentCellDirtyStateChanged += (_, _) => { if (objects.IsCurrentCellDirty) objects.CommitEdit(DataGridViewDataErrorContexts.Commit); };
@@ -178,7 +173,7 @@ internal sealed partial class WorkbenchForm : Form
     {
         var layout = Ui.Rows(new(SizeType.Absolute, 70), new(SizeType.Absolute, 44), new(SizeType.Absolute, 50), new(SizeType.Percent, 100));
         layout.Controls.Add(PageHeading("變更計畫與 SQL 草稿", "先閱讀風險與相依性。這裡沒有執行按鈕，也不會直接修改資料庫。"), 0, 0);
-        var rebuild = Ui.Button("重建計畫"), preflight = Ui.Button("唯讀資料預檢"), back = Ui.Button("返回差異");
+        Button rebuild = Ui.Button("重建計畫"), preflight = Ui.Button("唯讀資料預檢"), back = Ui.Button("返回差異");
         rebuild.Click += async (_, _) => await GeneratePlanAsync(false); preflight.Click += async (_, _) => await GeneratePlanAsync(true); back.Click += (_, _) => ShowPage("differences");
         exportSql.Click += async (_, _) => await ExportSqlAsync(); copySql.Click += (_, _) => { if (plan is not null && !plan.Blocked) Ui.Copy(this, plan.Sql); };
         exportSql.Enabled = copySql.Enabled = false; layout.Controls.Add(Ui.Actions(back, rebuild, preflight, exportSql, copySql), 0, 1);
@@ -191,8 +186,8 @@ internal sealed partial class WorkbenchForm : Form
     private Control BuildHistory()
     {
         var layout = Ui.Rows(new(SizeType.Absolute, 70), new(SizeType.Absolute, 44), new(SizeType.Percent, 45), new(SizeType.Percent, 55));
-        layout.Controls.Add(PageHeading("歷史紀錄與操作手順", "自動只保存摘要；完整定義、快照及資料 SQL 只在你明確匯出時寫入檔案。"), 0, 0);
-        var refresh = Ui.Button("重新載入紀錄"), snapshots = Ui.Button("離線比對兩份快照", true), workflow = Ui.Button("查看操作手順");
+        layout.Controls.Add(PageHeading("歷史紀錄與操作手順", "自動只保存摘要；完整定義、快照與資料 SQL 只在你明確匯出時寫入。"), 0, 0);
+        Button refresh = Ui.Button("重新載入紀錄"), snapshots = Ui.Button("離線比對兩份快照", true), workflow = Ui.Button("查看操作手順");
         refresh.Click += async (_, _) => await RunAsync(LoadHistoryAsync); snapshots.Click += async (_, _) => await CompareSnapshotsAsync(); workflow.Click += (_, _) => historyDetail.Text = WorkflowText;
         layout.Controls.Add(Ui.Actions(refresh, snapshots, workflow), 0, 1);
         foreach (var name in new[] { "時間", "標準", "檢查", "完整", "待處理" }) historyGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = name, Name = name });
@@ -225,5 +220,5 @@ internal sealed partial class WorkbenchForm : Form
     }
     private static CheckBox Check(string text, bool value) => new() { Text = text, Checked = value, AutoSize = true, Margin = new Padding(0, 7, 20, 5) };
     private static ComboBox Combo() => new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(0, 3, 6, 4) };
-    internal const string WorkflowText = "建議操作手順\r\n\r\n1. 環境與基準：輸入兩側連線並測試；需要批次檢查時，逐一加入已驗證目標。也可載入標準快照。\r\n2. 比對範圍：選擇物件類型、忽略規則及排除前綴，按開始比對。\r\n3. 差異檢視：先閱讀完成狀態；搜尋物件，檢視左右／合併 Diff，勾選要處理的差異。保留物件不能勾選部署。\r\n4. 變更計畫：檢查相依性與風險；必要時執行唯讀資料預檢。阻擋項目未處理前不會產生可執行 SQL。\r\n5. 匯出 SQL 草稿：由有權限的人員在正確目標、測試及备份確認後另行執行。工具本身不執行任何修改。\r\n6. 回到差異檢視重新比對，查看仍待處理項目；可匯出報告或保存結構快照。\r\n\r\n資料工具：獨立載入所有來源資料表；選取欄位、主鍵／唯一索引、條件與筆數。預設只补缺少資料，不覆寫既有資料。\r\n\r\n快捷鍵：F5 重新比對、Ctrl+F 搜尋、F7 下一處差異、Shift+F7 上一處、Esc 取消工作。\r\n\r\n歷史摘要保存在目前 Windows 使用者的 LocalAppData/WeYu/DbCheck；只保留最近 100 份。快照／SQL 可能含敏感定義或資料，請自行妥善保管。";
+    internal const string WorkflowText = "建議操作手順\r\n\r\n1. 環境與基準：輸入兩側連線並測試；需要批次檢查時，逐一加入已驗證目標。也可載入標準快照。\r\n2. 比對範圍：選擇物件類型、忽略規則及排除前綴，按開始比對。\r\n3. 差異檢視：先閱讀完成狀態；搜尋物件，檢視左右／合併 Diff，勾選要處理的差異。保留物件不能勾選部署。\r\n4. 變更計畫：檢查相依性與風險；必要時執行唯讀資料預檢。阻擋項目未處理前不會產生可執行 SQL。\r\n5. 匯出 SQL 草稿：由有權限的人員在正確目標、測試及備份確認後另行執行。工具本身不執行任何修改。\r\n6. 回到差異檢視重新比對，查看仍待處理項目；可匯出報告或保存結構快照。\r\n\r\n資料工具：獨立載入所有來源資料表；選取欄位、主鍵／唯一索引、條件與筆數。預設只補缺少資料，不覆寫既有資料。\r\n\r\n快捷鍵：F5 重新比對、Ctrl+F 搜尋、F7 下一處差異、Shift+F7 上一處、Esc 取消工作。\r\n\r\n歷史摘要保存在目前 Windows 使用者的 LocalAppData/WeYu/DbCheck；只保留最近 100 份。快照／SQL 可能含敏感定義或資料，請自行妥善保管。";
 }
