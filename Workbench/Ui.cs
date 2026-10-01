@@ -31,7 +31,9 @@ internal static class Ui
     public static TableLayoutPanel Rows(params RowStyle[] styles)
     {
         var panel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = styles.Length, Margin = new Padding(0) };
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); panel.RowStyles.AddRange(styles); return panel;
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        foreach (var style in styles) panel.RowStyles.Add(style);
+        return panel;
     }
     public static TabPage Tab(string title, Control content)
     {
@@ -46,12 +48,13 @@ internal static class Ui
     }
     public static string? Prompt(IWin32Window owner, string title, string message, string initial = "", bool secret = false)
     {
-        using var dialog = new Form { Text = title, Width = 620, Height = 220, MinimumSize = new Size(520, 220), StartPosition = FormStartPosition.CenterParent, Font = new Font("Microsoft JhengHei UI", 10), MinimizeBox = false, MaximizeBox = false, BackColor = Background };
-        var layout = Rows(new(SizeType.AutoSize), new(SizeType.Absolute, 42), new(SizeType.Absolute, 48)); layout.Padding = new Padding(18);
+        using var dialog = new Form { Text = title, Width = 620, Height = 240, MinimumSize = new Size(520, 240), StartPosition = FormStartPosition.CenterParent, Font = new Font("Microsoft JhengHei UI", 10), MinimizeBox = false, MaximizeBox = false, BackColor = Background };
+        var layout = Rows(new(SizeType.Percent, 100), new(SizeType.Absolute, 42), new(SizeType.Absolute, 48)); layout.Padding = new Padding(18);
         var box = TextBox(); box.Text = initial; box.UseSystemPasswordChar = secret;
         var ok = Button("確定", true); ok.DialogResult = DialogResult.OK;
         var cancel = Button("取消"); cancel.DialogResult = DialogResult.Cancel;
-        layout.Controls.Add(Label(message), 0, 0); layout.Controls.Add(box, 0, 1); layout.Controls.Add(Actions(ok, cancel), 0, 2);
+        var label = Label(message); label.Dock = DockStyle.Fill; label.AutoSize = false;
+        layout.Controls.Add(label, 0, 0); layout.Controls.Add(box, 0, 1); layout.Controls.Add(Actions(ok, cancel), 0, 2);
         dialog.Controls.Add(layout); dialog.AcceptButton = ok; dialog.CancelButton = cancel;
         return dialog.ShowDialog(owner) == DialogResult.OK ? box.Text : null;
     }
@@ -84,10 +87,10 @@ internal sealed class EndpointEditor : UserControl
         Dock = DockStyle.Fill; BackColor = Color.White; Padding = new Padding(18); Margin = new Padding(0, 0, 14, 0);
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 9, Margin = new Padding(0) };
         layout.ColumnStyles.Add(new(SizeType.Absolute, 72)); layout.ColumnStyles.Add(new(SizeType.Percent, 100));
-        foreach (var height in new[] { 34, 32, 38, 38, 38, 34, 38, 42, 48 }) layout.RowStyles.Add(new(SizeType.Absolute, height));
+        foreach (var height in new[] { 34, 42, 38, 38, 38, 34, 38, 70, 48 }) layout.RowStyles.Add(new(SizeType.Absolute, height));
         var heading = Ui.Label(title); heading.Font = new Font(Font, FontStyle.Bold);
         layout.Controls.Add(heading, 0, 0); layout.SetColumnSpan(heading, 2);
-        var description = Ui.Label(hint, true); layout.Controls.Add(description, 0, 1); layout.SetColumnSpan(description, 2);
+        var description = Ui.Label(hint, true); description.Dock = DockStyle.Fill; description.AutoSize = false; layout.Controls.Add(description, 0, 1); layout.SetColumnSpan(description, 2);
         layout.Controls.Add(Ui.Label("環境"), 0, 2); layout.Controls.Add(profiles, 1, 2);
         layout.Controls.Add(Ui.Label("伺服器"), 0, 3); layout.Controls.Add(server, 1, 3);
         layout.Controls.Add(Ui.Label("資料庫"), 0, 4); layout.Controls.Add(database, 1, 4);
@@ -100,35 +103,28 @@ internal sealed class EndpointEditor : UserControl
         var test = Ui.Button("測試連線", true); var save = Ui.Button("保存環境"); var paste = Ui.Button("貼入連線"); var delete = Ui.Button("移除環境");
         test.Click += (_, _) => TestRequested?.Invoke(this, EventArgs.Empty); save.Click += (_, _) => SaveRequested?.Invoke(this, EventArgs.Empty); delete.Click += (_, _) => DeleteRequested?.Invoke(this, EventArgs.Empty);
         paste.Click += (_, _) => { var text = Ui.Prompt(this, "貼入連線字串", "內容遮罩，只會保留在本次記憶體；保存環境時不保存帳密。", secret: true); if (text is null) return; try { LoadConnection(text); } catch (ArgumentException ex) { Ui.Error(this, ex); } };
-        // A compact overflow-friendly action row keeps credentials readable on smaller displays.
-        layout.Controls.Add(Ui.Actions(test, save, paste, delete), 0, 7); layout.SetColumnSpan(layout.GetControlFromPosition(0, 7)!, 2);
+        var actions = new ToolStrip { Dock = DockStyle.Fill, GripStyle = ToolStripGripStyle.Hidden, BackColor = Color.White, AutoSize = false, LayoutStyle = ToolStripLayoutStyle.HorizontalStackWithOverflow };
+        foreach (var button in new[] { test, save, paste, delete }) actions.Items.Add(new ToolStripControlHost(button) { AutoSize = true, Overflow = ToolStripItemOverflow.AsNeeded });
+        layout.Controls.Add(actions, 0, 7); layout.SetColumnSpan(actions, 2);
         status.Dock = DockStyle.Fill; status.AutoSize = false; status.AutoEllipsis = true; layout.Controls.Add(status, 0, 8); layout.SetColumnSpan(status, 2);
         Controls.Add(layout);
         foreach (var box in new[] { server, database, user, password }) box.TextChanged += (_, _) => InvalidateVerification();
         integrated.CheckedChanged += (_, _) => { user.Enabled = password.Enabled = !integrated.Checked; InvalidateVerification(); };
         profiles.SelectedIndexChanged += (_, _) => { if (!loading && profiles.SelectedItem is ConnectionProfile profile) LoadConnection(profile.ConnectionString); };
     }
-
     public void LoadProfiles(IReadOnlyList<ConnectionProfile> entries)
     {
-        var selected = SelectedProfile;
-        loading = true;
-        try
-        {
-            profiles.Items.Clear(); profiles.Items.AddRange(entries.Cast<object>().ToArray());
-            if (selected is not null) profiles.SelectedIndex = entries.ToList().FindIndex(p => p.Name == selected);
-        }
+        var selected = SelectedProfile; loading = true;
+        try { profiles.Items.Clear(); profiles.Items.AddRange(entries.Cast<object>().ToArray()); if (selected is not null) profiles.SelectedIndex = entries.ToList().FindIndex(p => p.Name == selected); }
         finally { loading = false; }
     }
     public void LoadConnection(string connectionString)
     {
-        var builder = new SqlConnectionStringBuilder(connectionString);
-        loading = true;
+        var builder = new SqlConnectionStringBuilder(connectionString); loading = true;
         try
         {
             server.Text = builder.DataSource; database.Text = builder.InitialCatalog; user.Text = builder.UserID; password.Text = builder.Password; integrated.Checked = builder.IntegratedSecurity;
-            builder.Remove("Password"); builder.Remove("User ID"); settings = builder;
-            user.Enabled = password.Enabled = !integrated.Checked;
+            builder.Remove("Password"); builder.Remove("User ID"); settings = builder; user.Enabled = password.Enabled = !integrated.Checked;
         }
         finally { loading = false; }
         InvalidateVerification();
@@ -143,8 +139,7 @@ internal sealed class EndpointEditor : UserControl
     }
     public async Task TestAsync(CancellationToken token)
     {
-        var version = revision; var connection = BuildConnection();
-        status.Text = "正在測試連線與 VIEW DEFINITION 權限…"; status.ForeColor = Ui.Muted;
+        var version = revision; var connection = BuildConnection(); status.Text = "正在測試連線與 VIEW DEFINITION 權限…"; status.ForeColor = Ui.Muted;
         try
         {
             var label = await CatalogService.TestAsync(connection, token);
@@ -160,7 +155,6 @@ internal sealed class EndpointEditor : UserControl
     private void InvalidateVerification()
     {
         if (loading) return;
-        revision++; VerifiedConnection = null; VerifiedLabel = null; status.Text = "設定已變更，請重新測試。"; status.ForeColor = Ui.Muted;
-        Changed?.Invoke(this, EventArgs.Empty);
+        revision++; VerifiedConnection = null; VerifiedLabel = null; status.Text = "設定已變更，請重新測試。"; status.ForeColor = Ui.Muted; Changed?.Invoke(this, EventArgs.Empty);
     }
 }
