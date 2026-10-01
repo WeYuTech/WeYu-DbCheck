@@ -1,48 +1,139 @@
-# WEYU-DBCheck
+# WEYU DBCheck
 
-首次下載後，先執行 `Copy-Item app.config.example app.config` 並填入本機連線設定，再用 `dotnet run` 開啟介面。需要 Windows、.NET 8 SDK（建置）或 .NET 8 Desktop Runtime（執行）。app.config 含本機帳密，不納入 Git；儲存庫只提供無帳密範本。建置命令：`dotnet build`。
+SQL Server 唯讀比對工作台：先選環境與範圍，再以 Git 式差異檢視閱讀變更，最後產生需要人工檢閱的 SQL 草稿。
 
-「Function / SP 比對」以標準 DB 比對檢查 DB 的 T-SQL 純量函式、內嵌／多語句表值函式與預存程序，缺少或定義不同的物件列於下方多選清單，點選顯示名稱、類型及兩側定義。支援全選、排除 ZZ 與完成訊息。「產生SCHEMA SQL」可產生選取物件的 CREATE／ALTER FUNCTION 或 PROCEDURE；INSERT 停用。定義採文字比對（含 SET 選項與物件類型，忽略 CREATE／ALTER 和 PROC／PROCEDURE 標頭差異）。加密、CLR、不可見定義會回報失敗；類型不相容時不自動產生 ALTER。SQL 僅供預覽，相依物件順序須自行檢閱。
+**程式不執行資料庫 DDL、INSERT、UPDATE 或 DELETE。SQL 預览與資料庫執行是分離的操作。**
 
-「排除ZZ」依模式套用：Table 比對排除 ZZ 開頭；View 比對排除 V_ZZ 開頭（皆不分大小寫）。View 模式中只有 ZZ 開頭、不符合 V_ZZ 的名稱仍會保留。
+## 快速開始
 
-「資料 View 表比對」以標準 DB 為準，將檢查 DB 缺少或定義不同的 View 放入下方多選清單，支援排除 ZZ、逐項差異與完成訊息框。「產生SCHEMA SQL」依標準定義產生 CREATE VIEW（缺少）或 ALTER VIEW（已存在），保留 ANSI_NULLS／QUOTED_IDENTIFIER，並以 GO 分批。View 模式停用 INSERT、排序與筆數選項。定義比對忽略 CREATE／ALTER 標頭差別，其他 SQL 文字與 SET 選項仍比對；加密／不可見定義視為失敗。SQL 僅預覽；相依 View 的建立順序、索引化 View 的索引重建須另行檢閱。
-
-差異 TABLE 清單使用可勾選多筆的清單，提供全選／取消全選。點選某列顯示該 TABLE 的差異；兩種 SQL 按鈕處理所有勾選項目，未勾選時停用。多表結果以 GO 分隔供 SSMS 等支援批次分隔符號的工具檢閱。Data Insert 的排序與筆數分別套用每個 TABLE，任一表讀取失敗時不顯示不完整的 SQL。排除 ZZ 會取消隱藏項目的勾選，恢復清單後需重新勾選。
-
-TABLE 下拉選單前有「排除ZZ」核取方塊，預設不勾選。勾選即隱藏資料表名稱以 ZZ 開頭的差異 TABLE（不分大小寫，不以 schema 名稱篩選），並更新顯示數量。取消勾選可恢復完整清單，不重新查詢資料庫。若選取項目被排除，改選第一個可見項目；全部排除時停用 SQL 按鈕。
-
-畫面比對忽略 ColumnOrdinal 與索引名稱，只比較索引定義。TABLE 選單與 SQL 按鈕位於差異文字上方，文字區僅顯示目前選取 TABLE 的差異；總差異 TABLE 數量仍保留。比對完成會顯示訊息框（包含無差異的情況）。產生 SCHEMA SQL 時也忽略只有名稱不同的等價索引。
-
-差異 TABLE 選單旁提供「產生SCHEMA SQL」及「產生 Data Insert SQL」。後者唯讀查詢標準 DB 所選 TABLE 的 指定筆數資料（預設 100），依主鍵順排 ASC 或逆排 DESC（預設順排）；無主鍵時提示無法排序並停止產生，顯示可複製的 INSERT 預覽，不執行。需要標準 DB 的 SELECT 權限。日期時間格式為 yyyy-MM-dd HH:mm:ss.fff，datetimeoffset 額外保留時區偏移；高於毫秒的時間精度會截至毫秒。略過計算欄位、rowversion、hidden／generated 欄位；包含 IDENTITY 時產生 IDENTITY_INSERT ON/OFF。CLR／空間／sql_variant 目前不支援。請檢閱檢查 DB 的欄位相容性、鍵值衝突，並妥善保管含資料內容的 SQL。
-
-結構比對忽略欄位 CollationName（定序）差異；產生欄位 CREATE／ADD／ALTER SQL 時不附加 COLLATE 子句。結構 DataTable 仍保留原始定序資訊。
-
-第一組連線標註「標準 DB」，第二組為「檢查 DB」，設定鍵仍為 MES-H5-DB 與 Project-DB。畫面只保留一個「檢查 DB 差異」區，列出相對標準 DB 缺少或不同的項目。資料表數量按 schema + table 去重，附差異 TABLE 下拉選單與「產生 SQL」。SQL 僅以標準 DB 產生檢查 DB 的修改草稿，預覽可選取複製，不會執行。修改連線或重新比對會清除舊選單。
-
-SQL 預覽為修改草稿：支援缺少資料表／欄位、一般欄位型別／長度／NULL、預設值與一般 rowstore 索引／主鍵／唯一約束。IDENTITY 變更、計算欄位重建、特殊索引與欄位順序等需人工處理，預覽會列出提示。目標獨有欄位與索引保留；外鍵、CHECK、觸發器、儲存配置與資料轉換不在自動腳本範圍。执行前需檢閱相依物件、已有資料及正確目標資料庫。
-
-「資料結構比對」直接呼叫 GetTableStructureAsync，分別載入標準與檢查 DB 的 DataTable，以 SchemaName、TableName、ColumnName 配對 DataRow；* 表示不同屬性。此畫面流程比較函式回傳的欄位及索引資訊，不額外讀取外鍵或 CHECK 約束；命令列完整結構比對仍保留原有範圍。
-
-欄位結構函式：`await SchemaReader.GetTableStructureAsync(connectionString, cancellationToken)` 回傳 `DataTable`，每個欄位一列，按 TableName、ColumnName、SchemaName 排序。包含 SchemaName、TableName、ColumnName、TypeSchema、DataType、Length、MaxLengthBytes、Precision、Scale、IsNullable、IsPrimaryKey、HasIndex、IndexInfo、預設值與計算欄位等。Length 的 -1 表示 MAX；nchar/nvarchar 為 UTF-16 單位數，其他型別為 SQL 中繼資料位元組長度。IndexInfo 彙整多個索引名稱、主鍵、Unique、鍵順序、ASC/DESC、Include、篩選條件及停用狀態。可傳入 H5-DB 或 Project-DB 的連線字串，僅執行唯讀查詢並要求 VIEW DEFINITION 權限。
-
-畫面資料結構、View 與 Function 比對皆為標準 DB → 檢查 DB 單向比對，不列出檢查 DB 獨有項目。執行進度區顯示資料讀取與比對狀態，比對期間鎖定連線輸入。
-
-直接執行 EXE 或 `dotnet run` 開啟 Windows Forms 操作畫面，啟動時讀取執行目錄 app.config。帳密可在畫面輸入，密碼遮罩且不寫回設定檔。兩邊測試成功才啟用資料結構、View、Function 比對；更改連線或帳密後必須重新測試。
-
-View 與 T-SQL Function 採定義文字比對（含 ANSI_NULLS／QUOTED_IDENTIFIER）；不比對 View 資料列。加密定義或 CLR Function 目前不支援，會回報比對失敗，不視為一致。命令列參數仍提供原有資料表結構比對。GUI 需要 Windows 與 .NET 8 Desktop Runtime。
-
-.NET 8 命令列工具，唯讀比對兩個 SQL Server（2016 以上）資料庫的資料表結構，輸出 JSON 差異報告。尚未設定實際來源／目標資料庫。
-
-涵蓋資料表、欄位順序／型別／長度／精度／NULL／定序、IDENTITY、計算欄位、預設值、主鍵、唯一索引、索引欄位、外鍵與 CHECK 約束。按 schema 與物件名稱精確比對；SQL 定義以文字比對，不判斷語意等價。自動產生的約束或索引名稱不同可能列為差異。
-
-不比對資料內容、View、預存程序、觸發器、權限、分割區與儲存配置；不是完整的資料庫部署同步工具。比對期間請避免 DDL 異動；目前查詢並非跨資料庫的一致快照。
+需要 Windows、.NET 8 SDK。執行已建置程式需要對應的 .NET Desktop Runtime。沿用現有 WinForms／Microsoft.Data.SqlClient 相依套件，沒有新增 NuGet 套件。
 
 ```powershell
-# 編輯 app.config：MES-H5-DB 為來源，Project-DB 為目標
+# 首次執行：本機設定不提交 Git
+Copy-Item app.config.example app.config
+# 編輯 MES-H5-DB（標準）與 Project-DB（檢查）的連線設定
+
+dotnet build
+dotnet run
+```
+
+也能在畫面輸入連線設定。SQL 驗證的密碼會遮罩；保存環境只保存伺服器、資料庫與白名單內的非敏感連線選項，不保存帳號、密碼或 token。不會自動降低連線加密設定。
+
+不需要資料庫即可檢視新 UI：
+
+```powershell
+dotnet run -- --demo
+```
+
+示範模式使用合成結構，包含一般差異、目標額外欄位及不可讀取定義，不連接資料庫。
+
+## 新操作流程
+
+| 步驟 | 操作 | 產出 |
+|---|---|---|
+| 01 環境與基準 | 測試標準／檢查 DB；可加入多個已驗證目標，或載入離線標準快照 | 明確的來源與目標 |
+| 02 比對範圍 | 選 Table、View、Function／SP、FK、CHECK、DML Trigger 及忽略／排除規則 | 可重現的比對設定 |
+| 03 差異檢視 | 搜尋、篩選、左右／合併 Diff、原始定義、屬性對照；勾選物件 | 需要處理的物件清單 |
+| 04 變更計畫 | 檢查相依順序與風險；按需執行唯讀資料預檢 | 變更計畫與 SQL 草稿 |
+| 再次驗證 | 人工於工具外處理後，重新比對並匯出報告 | 剩餘差異及歷史摘要 |
+
+小視窗可手動切換「合併檢視」，並利用工具列的更多選項。詳細操作見 [操作手順](docs/WORKFLOW.md)；安全與已知限制見 [支援範圍與驗證](docs/COVERAGE-AND-VALIDATION.md)。
+
+## 差異檢視
+
+左側是檢查 DB 的目前內容，右側是標準 DB 的基準；SQL 修改方向仍是標準 DB → 檢查 DB。
+
+提供左右並排與合併檢視、紅／綠行標示、字詞加深、對齊行號、空白對齊列、水平／垂直同步捲動、F7／Shift+F7 差異導覽、相同內容摺疊及雙擊展開。複製原文不會包含檢視用的行號。
+
+資料表先按欄位、索引及約束配對，再產生顯示文字；不再把全表索引差異重複算到每個欄位。View／Function／SP 使用 SQL 定義文字比對，保留字串內空白，不推論 SQL 語意等價。CREATE／ALTER／PROC 標頭會做有限的正規化。
+
+**紅色只是差異標示，不代表刪除操作。**
+
+### 完成狀態
+
+- `Missing`／`Changed`：標準物件在目標缺少或不同，可勾選計畫。
+- `Retained`：目標獨有物件或額外欄位／索引／約束，保留且不產生 DROP。
+- `Unverifiable`：CLR、加密、定義不可讀取或範圍讀取失敗；不可視為一致或不存在。
+
+一個物件不可讀取不會丟棄其他物件的結果。部分完成時明確顯示問題；多目標依序處理，可重試失敗或部分完成目標。
+
+預設忽略定序、欄位順序及索引／約束名稱。排除 ZZ 在讀取物件定義前套用；View 對應 `V_ZZ`，其他物件對應 `ZZ`。額外前綴使用參數，不接受任意 SQL。
+
+## 變更計畫與唯讀預檢
+
+計畫會區分資訊、待確認與阻擋，依可解析相依性排列物件，將 FK／CHECK 建立安排於主要物件之後。相依循環、缺少 schema、部分特殊欄位／索引、索引化 View 等不可靠情況不產生可執行 SQL。
+
+資料預檢是明確選用的操作，可能掃描資料，包含適用的 NULL、長度、轉型、精度損失、未篩選唯一索引重複鍵與外鍵孤兒資料檢查。先重新讀取目標 metadata，若與原比對基準不同就要求重新比對。
+
+CHECK 及 filtered index 的定義有納入結構比對，但程式**不直接執行來源或快照中的任意表達式**。其資料符合性、轉型後唯一性、空間需求、锁定及外部相依需人工確認。
+
+產生的草稿含目標伺服器／資料庫防護、獨立交易要求、`XACT_ABORT`、`TRY/CATCH`、rollback 與 rethrow。結構草稿使用單一外層批次，避免前一批失敗後工具繼續執行後續 `GO` 批次。這些防護不等於已驗證可以部署，也不取代備份、測試與人工審核。
+
+## 獨立資料工具
+
+資料匯出與補齊不再依賴「結構有差異」的清單，可載入標準 DB 的所有資料表。它使用步驟 01 的即時連線，不使用批次目標或離線基準。
+
+可選欄位、有效唯一鍵、筆數、順／逆排與單一條件。条件欄位／運算子固定，值採參數化，不能輸入 WHERE SQL 片段。
+
+**匯出來源資料**產生來源指定範圍的 INSERT，不是資料比對。未指定檢查目標的匯出使用目標占位防護，需人工確認並替換伺服器／資料庫名稱。
+
+**比對並補缺**依標準 DB 選取的鍵範圍配對，區分缺少、不同與相同。預設只產生補缺 INSERT；不同資料只展示，不覆寫。明確勾選後才另外產生 UPDATE，並以讀取時的選取欄位二進位值做樂觀並發檢查。目標獨有資料不掃描、不刪除，也不宣稱全表一致。
+
+無主鍵時可使用未停用、非 filtered、鍵欄位非 NULL 的唯一索引；沒有可靠唯一鍵則停止，不推測業務身分。目標查詢以分批鍵集合配對，不逐列往返資料庫。
+
+`datetime2`／`datetimeoffset`／`time` 匯出保留七位小數秒；傳統 `datetime` 使用相容的毫秒格式。計算、rowversion、hidden、generated、加密、CLR／空間及 sql_variant 等不可靠寫入欄位不自動匯出。詳見支援範圍文件。
+
+## 環境、報告與快照
+
+環境與最近 100 份歷史摘要位於 `%LOCALAPPDATA%\WeYu\DbCheck`。自動歷史只記錄環境標籤、時間、規則、數量及物件識別，不自動保存 SQL 定義、資料列或帳密。只有同環境、同規則、完整的兩次報告才計算新增／已解決物件數。
+
+報告可匯出 JSON、HTML、CSV；完整定義及資料可能敏感。HTML 內容會編碼，CSV 會防護試算表公式起始字元。檔案先写入暫存再替換，取消時不把半成品當作完成結果。
+
+快照保存結構與定義、不含連線字串或資料列。可離線比對兩份快照，或拿標準快照比對即時檢查 DB。只使用可信来源快照；採集範圍與排除規則不相容時顯示部分完成，不把漏採集物件誤認為不存在。
+
+## 新版命令列
+
+```powershell
+# 與新 GUI 共用比對引擎、範圍與狀態
+dotnet run -- --workbench --config app.config --output output/report.html
+
+# 明確指定範圍及排除前綴
+dotnet run -- --workbench --config app.config --scope tables,foreignkeys,checks --exclude-prefix TEMP_,BACKUP_ --output output/report.json
+
+# 離線快照比對：採集範圍須與 CLI 設定相容
+dotnet run -- --workbench --source-snapshot standard.json --target-snapshot check.json --output output/offline.json
+
+# 額外保存標準快照、產生草稿；不執行 SQL
+dotnet run -- --workbench --config app.config --save-snapshot output/standard.json --plan output/review.sql
+
+# 明確要求可能掃描資料的唯讀預檢
+dotnet run -- --workbench --config app.config --preflight --plan output/review.sql
+
+dotnet run -- --workbench --help
+```
+
+新版退出碼：`0` 已選範圍沒有待處理差異；`2` 有差異；`3` 部分完成或計畫被阻擋；`1` 失敗／取消。計畫被阻擋時不寫入 SQL，也不刪除先前同名檔案；舊檔不能當作本次產出。
+
+連線可由 `WEYU_DBCHECK_SOURCE`／`WEYU_DBCHECK_TARGET` 覆蓋。結構讀取要求資料庫 `VIEW DEFINITION`；資料匯出／預檢另需 SELECT。建議以最低必要唯讀權限執行。
+
+## 向後相容
+
+```powershell
+# 保留舊 GUI
+dotnet run -- --legacy-gui
+
+# 未加 --workbench 的舊 CLI，維持原來的雙向結構比較與退出碼
 dotnet run -- --config app.config --output output/differences.json
 ```
 
-連線亦可透過 WEYU_DBCHECK_SOURCE 與 WEYU_DBCHECK_TARGET 環境變數覆蓋。帳號需能連線且具資料庫 VIEW DEFINITION 權限。建議使用唯讀帳號；不要提交實際密碼。不會複製、更新或刪除資料庫內容。
+舊入口與新版規則不相同，沒有偷偷替换原 CLI 契約。舊 GUI 的 DataTable／SCHEMA SQL／Data Insert 工作流程保留；新功能在預設的新工作台中。舊 Data Insert 日期輸出仍是原毫秒行為，需完整時間精度請使用新資料工具。
 
-退出碼：0 一致；2 有差異；1 失敗。差異狀態：OnlyInSource、OnlyInTarget、Changed。報告包含結構與預設值定義，請按資料敏感程度保管。
+## 建置與驗證
+
+```powershell
+dotnet build -c Release
+dotnet run -c Release -- --self-test
+dotnet run -c Release -- --ui-smoke-test output/ui
+```
+
+GitHub Actions 在 Windows 建置、執行無資料庫回歸測試，並以合成資料擷取六個頁面及兩種 Diff 模式，產生 1440×900／1000×720 UI artifacts。沒有連接正式 SQL Server，也沒有將生成的 DDL／DML 實際執行。實際 SQL Server 版本、權限、資料型別與約束場景仍需在獲准的測試環境完成整合驗證。
